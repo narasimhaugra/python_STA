@@ -1,0 +1,691 @@
+#C @ Updated to include the common Class Call i.e. Serial_Control.py by Varun Pandey on Dec 23, 2021
+import sys
+import time
+
+import nidaqmx
+import pandas as pd
+import serial.tools.list_ports
+
+import MCPThread
+import OLEDRecordingThread
+from CRC16 import CRC16
+from CRC16 import calc
+from Compare import Compare
+from EventsStrings import locateStringsToCompareFromEvent
+from Prepare_Output_Json_File import *
+# from NCDSerialConnection import *
+from ReadBatteryRSOC import read_battery_RSOC
+from ReadStatusVariables import ReadStatusVariables
+from Read_Handle_Fire_Count import GetHandleUseCount
+from ReadingQue import ReadingQue
+from RelayControlBytes import *
+from Serial_Control import serialControl
+
+EmergencyRetraction_Results = []
+
+def EmergencyRetraction(r, SULU_EEPROM_command_byte, MULU_EEPROM_command_byte, CARTRIDGE_EEPROM_command_byte,
+                               NCDComPort,
+                               PowerPackComPort, BlackBoxComPort, USB6351ComPort, ArduinoUNOComPort, OUTPUT_PATH,
+                               videoPath, p):
+    serialControlObj = serialControl(r, SULU_EEPROM_command_byte, MULU_EEPROM_command_byte,
+                                     CARTRIDGE_EEPROM_command_byte, NCDComPort, PowerPackComPort, BlackBoxComPort,
+                                     USB6351ComPort, ArduinoUNOComPort, OUTPUT_PATH, videoPath)
+    #serialControlObj.OpenSerialConnection()
+    
+    serialControlObj.OpenSerialConnection()
+    Emergency_Retraction(serialControlObj, SULU_EEPROM_command_byte, MULU_EEPROM_command_byte,
+                                     CARTRIDGE_EEPROM_command_byte, NCDComPort, PowerPackComPort, BlackBoxComPort,
+                                     USB6351ComPort, ArduinoUNOComPort, OUTPUT_PATH, videoPath, p)
+    serialControlObj.disconnectSerialConnection()
+
+
+def Emergency_Retraction(serialControlObj, SULU_EEPROM_command_byte, MULU_EEPROM_command_byte,
+                                             CARTRIDGE_EEPROM_command_byte, NCDComPort, PowerPackComPort,
+                                             BlackBoxComPort,
+                                             USB6351ComPort, ArduinoUNOComPort, OUTPUT_PATH, videoPath, p):
+
+    TestBatteryLevelMax = serialControlObj.r['Battery RSOC Max Level']
+    TestBatteryLevelMin = serialControlObj.r['Battery RSOC Min Level']
+    clampingForce = serialControlObj.r['Clamping Force']
+    firingForce = serialControlObj.r['Firing Force']
+    articulationStateinFiring = serialControlObj.r['Articulation State for clamping & firing']
+    numberOfFiringsinProcedure = serialControlObj.r['Num of Firings in Procedure']
+    #retractionForce = serialControlObj.r['Retraction Force']
+    print(TestBatteryLevelMax, TestBatteryLevelMin, clampingForce, firingForce, articulationStateinFiring,
+          numberOfFiringsinProcedure)
+    iterPass = 0
+    firePass = 0
+    with nidaqmx.Task() as task:
+        task.ao_channels.add_ao_voltage_chan('Dev1/ao0')
+        print('1 Channel 1 Sample Write: ')
+        print(task.write(0.25))
+
+    serialControlObj.send_decimal_bytes(TURN_OFF_ALL_RELAYS_IN_ALL_BANKS[0])
+    serialControlObj.wait(0.5)
+    serialControlObj.Switch_ONN_Relay(3, 8)
+
+    serialControlObj.wait(0.5)
+    serialControlObj.Switch_ONN_Relay(3, 7)
+
+    serialControlObj.wait(60)
+
+    serialControlObj.send_decimal_bytes(TURN_OFF_ALL_RELAYS_IN_ALL_BANKS[0])
+    print("Step: Remove Signia Power Handle from Charger")
+    serialControlObj.wait(30)
+
+    # while True:
+    #     # seriallistData = serial.tools.list_ports.comports()
+    #     # print(seriallistData)
+    #     singiaPowerFound = False
+    #     for singlePort in serial.tools.list_ports.comports():
+    #         # print(str(singlePort))
+    #         if 'SigniaPowerHandle' in str(singlePort):
+    #             singiaPowerFound = True
+    #             continue
+    #     if singiaPowerFound:
+    #         continue
+    #     else:
+    #         print('break from here')
+    #         singiaPowerFound = False
+    #         break
+    #    serialControlObj.wait(15)
+
+    # MCPThread.readingPowerPack.exitFlag = True
+
+    if (read_battery_RSOC(25, PowerPackComPort) > TestBatteryLevelMax):  # and (
+        # read_battery_RSOC(25, PowerPackComPort) > TestBatteryLevelMin):
+        serialControlObj.Switch_ONN_Relay(1, 8)
+        serialControlObj.wait(10)
+        print("Adapter Engaged to Power Pack Mechanically")
+
+        # TEST STEP: Attach the EGIA Adapter
+        serialControlObj.Switch_ONN_ALL_Relays_In_Each_Bank(1)  # B1 - ALL ON
+        print("Step: Adapter Connected")
+        serialControlObj.wait(20)
+        serialControlObj.ConnectingLegacyReload()
+        print("Step: Legacy Reload Connected")
+        serialControlObj.wait(5)
+        while (read_battery_RSOC(25,
+                                 PowerPackComPort) > TestBatteryLevelMax):  # and (read_battery_RSOC(25, PowerPackComPort) > TestBatteryLevelMin):
+            serialControlObj.Switch_ONN_Relay(2, 5)  # B2:R5 - ON -- some operations battery discharge
+            serialControlObj.wait(7)
+            serialControlObj.Switch_OFF_Relay(2, 5)  # B2:R5 - ON
+            serialControlObj.Switch_ONN_Relay(2, 4)  # B2:R5 - ON
+            serialControlObj.wait(7)
+            serialControlObj.Switch_OFF_Relay(2, 4)  # B2:R5 - ON
+
+        serialControlObj.Switch_OFF_Relay(3, 1)  # B3:R1 - OFF
+        serialControlObj.Switch_OFF_ALL_Relays_In_Each_Bank(1)
+        serialControlObj.wait(10)
+    if (read_battery_RSOC(25,
+                          PowerPackComPort) < TestBatteryLevelMin):  # and (read_battery_RSOC(25, PowerPackComPort) <= TestBatteryLevelMax):
+        # print('entered elif loop')
+        serialControlObj.Switch_ONN_Relay(3, 7)  # battery charge
+        serialControlObj.wait(0.5)
+        serialControlObj.Switch_ONN_Relay(3, 8)
+        # need to optimize this delay so that handle does not go to sleep or does not result communciation
+        # failure while placing on charger
+        serialControlObj.wait(10)
+        while (read_battery_RSOC(50,
+                                 PowerPackComPort) < TestBatteryLevelMin):  # and (read_battery_RSOC(25, PowerPackComPort) <= TestBatteryLevelMax):
+            pass
+            # serialControlObj.wait(.01)
+            # read_battery_RSOC(10, PowerPackComPort)
+
+    # if read_battery_RSOC(10, PowerPackComPort) == TestBatteryLevel:
+    #      pass
+    serialControlObj.wait(20)
+    print("----------Placing Power Pack on Charger for startup Test--------------")
+    serialControlObj.Switch_ONN_Relay(3, 7)
+    serialControlObj.wait(0.2)
+    serialControlObj.Switch_ONN_Relay(3, 8)
+    serialControlObj.wait(60)
+    print("----------Removing Power Pack from Charger for startup Test--------------")
+    serialControlObj.Switch_OFF_Relay(3, 7)
+    serialControlObj.wait(.2)
+    serialControlObj.Switch_OFF_Relay(3, 8)
+
+    while True:
+        # seriallistData = serial.tools.list_ports.comports()
+        # print(seriallistData)
+        singiaPowerFound = False
+        if any("SigniaPowerHandle" in s for s in serial.tools.list_ports.comports()):
+            singiaPowerFound = True
+        else:
+            print('break from here')
+            singiaPowerFound = False
+            break
+
+    strPort = 'None'
+    # serialControlObj.wait(2)
+    while (not 'SigniaPowerHandle' in strPort):
+        ports = serial.tools.list_ports.comports()
+        # strPort = 'None'
+        numConnection = len(ports)
+        for i in range(0, numConnection):
+            port = ports[i]
+            strPort = str(port)
+            if 'SigniaPowerHandle' in strPort:
+                print(ports[i])
+                break
+    # serialControlObj.wait(30)
+    serialControlObj.wait(7)
+
+    PPnotReady = True
+    while PPnotReady:
+        try:
+
+            serPP = serial.Serial(serialControlObj.PowerPackComPort, 115200, bytesize=8, parity='N', stopbits=1, timeout=0.05, xonxoff=0)
+            my_Serthread = MCPThread.readingPowerPack(serPP, 1000)
+            my_Serthread.clearQue()
+            MCPThread.readingPowerPack.exitFlag = False
+            my_Serthread.start()
+            PPnotReady = False
+            #print(sys.argv[0], end=" ")
+        except:
+            pass
+    # my_Serthread.clearQue()
+
+    serialControlObj.Test_Results.append(
+        str(serialControlObj.r['Scenario Num']) + '#' + str(p + 1) + "@" + serialControlObj.r[
+            'Test Scenario'])  # + str(i+1))
+
+    serialControlObj.wait(60)
+    searchFlag = True
+
+    Timestamps, Strings_from_PowerPack, data_path = ReadingQue(my_Serthread.readQue, searchFlag)
+    serialControl.convertListtoLogFile(Strings_from_PowerPack, (videoPath + '\\StartUpLog.txt'), fileOpenMode='w')
+    serialControl.convertListtoLogFile(Strings_from_PowerPack, 'TotalLog.txt', fileOpenMode='a')
+    data_path = "None" if not data_path else data_path
+    serialControlObj.Test_Results.append('Eventlog:' + data_path)
+    ################################################################################################################
+
+    byte_data = [2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    crc_value = CRC16(0x00, byte_data)
+    crc_value = hex(crc_value)
+    # print('Original CRC: ', crc_value)
+    # crc_second_byte = crc_value[2:4]
+    # crc_first_byte = crc_value[4:]
+    l = len(crc_value)
+    crc_second_byte = crc_value[2:(l - 2)]
+    crc_first_byte = crc_value[(l - 2):]
+    # print(crc_first_byte)
+    # print(crc_second_byte)
+    byte_data.append(int(crc_first_byte, 16))
+    byte_data.append(int(crc_second_byte, 16))
+    # print(byte_data)
+    # print(len(byte_data))
+    ######################################
+    byte_lst = [170, 69, 2, 1] + byte_data
+    # print(byte_lst)
+    crc_value = calc(bytes(byte_lst))
+    crc_value = int(crc_value, 16)
+    byte_lst.append(crc_value)
+    command_byte = (byte_lst)
+    print(command_byte)
+    serialControlObj.Switch_ONN_Relay(5, 1)  # B5:R1 - ON
+    serialControlObj.Switch_ONN_Relay(5, 5)  # B5:R1 - ON
+    ser = serial.Serial(BlackBoxComPort, 9600)
+    serialControlObj.wait(5)
+    ############# READ ###################
+    command = bytes(command_byte)
+    ser.write(command)
+    serialControlObj.wait(3)
+    time.sleep(5)
+    print(command)
+    s = ser.read(2)
+    s = list(s)
+    packet_size = s[1]
+    read_data = ser.read(packet_size - 2)
+    read_data = list(read_data)
+    print("==== READ DATA ====")
+    print(read_data[1:-1])
+    ser.close()
+    serialControlObj.Switch_OFF_Relay(5, 1)  # B5:R1 - OFF
+    serialControlObj.Switch_OFF_Relay(5, 5)  # B5:R1 - OFF
+    serialControlObj.wait(1)
+    my_Serthread.clearQue()
+    serialControlObj.wait(5)
+
+    serialControlObj.connectClamshell()
+    print("Step: Clamshell Connected")
+    serialControlObj.wait(5)
+    Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+    serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+    '''Strings_to_Compare = [' 1Wire Device Clamshell attached on 1WireBus Clamshell',
+                          '  1Wire Device Clamshell authenticated and identified',
+                          ' OneWire_TestDeviceWritable: Clamshell Starting test',
+                          ' Saving OneWire memory to device Clamshell',
+                          ' Succeeded writing OneWire memory to device Clamshell',
+                          ' OneWire_TestDeviceWritable: Clamshell Passed test', ' P_SIG_CLAMSHELL_CONNECTED',
+                          ' SM_NewSystemEventAlert: CLAMSHELL_INSTALLED', ' GUI_NewState: REQUEST_ADAPTER']'''
+    Strings_to_Compare = locateStringsToCompareFromEvent('Clamshell Connected')
+    result = Compare('Clamshell Connected', Strings_to_Compare, Strings_from_PowerPack)
+
+    rlist = {'Test Step': ['Clamshell Connected'], 'Test Result': [result]}
+    df = pd.DataFrame(rlist)
+
+
+    serialControlObj.Test_Results.append('Connected Clamshell:' + result)
+    print(serialControlObj.Test_Results)
+
+    ## Engaging the Adapter - Controlling the stepper motor
+    serialControlObj.Switch_ONN_Relay(1, 8)
+    serialControlObj.wait(7)
+    print("Adapter Engaged to Power Pack Mechanically")
+
+    my_Serthread.clearQue()
+    serialControlObj.wait(5)
+    # TEST STEP: Attach the EGIA Adapter
+    serialControlObj.Switch_ONN_ALL_Relays_In_Each_Bank(1)  # B1 - ALL ON
+    print("Step: Adapter Connected")
+    serialControlObj.wait(10)
+    Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+    serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+    '''Strings_to_Compare = ['  1Wire Device Adapter authenticated and identified',
+                          ' GUI_NewState: ADAPTER_DETECTED',
+                          ' GUI_NewState: EGIA_ADAPTER_CALIBRATING',
+                          ' SM_NewSystemEventAlert: ADAPTER_FULLY_CALIBRATED',
+                          ' Piezo: All Good',
+                          ' GUI_NewState: EGIA_REQUEST_RELOAD']'''
+    Strings_to_Compare = locateStringsToCompareFromEvent('Adapter Connected')
+    result = Compare('Adapter Connected', Strings_to_Compare, Strings_from_PowerPack)
+    serialControlObj.Test_Results.append('Adapter Connected:' + result)
+    print(serialControlObj.Test_Results)
+
+    rlist = {'Test Step': ['Adapter Connected'], 'Test Result': [result]}
+    df = df.append(pd.DataFrame(rlist))
+    serialControlObj.wait(5)
+
+    for i in range(serialControlObj.r['Num of Firings in Procedure']):
+        MCPThread.readingPowerPack.exitFlag = True
+        serPP.close()
+        serialControlObj.wait(2)
+        # print(serialControlObj.Test_Results)
+        HandleFireCount1, HandleProcedureCount = GetHandleUseCount(PowerPackComPort)
+        print('Before Firing Handle Fire Count:' + str(HandleFireCount1),
+              'Handle Procedure Count:' + str(HandleProcedureCount))
+        serialControlObj.wait(2)
+        StatusVariables1 = ReadStatusVariables(PowerPackComPort)
+        StatusVariables1 = StatusVariables1[13:61]
+        print(StatusVariables1)
+        serPP = serial.Serial(serialControlObj.PowerPackComPort, 115200, bytesize=8, parity='N', stopbits=1,
+                              timeout=0.05, xonxoff=0)
+        MCPThread.readingPowerPack.exitFlag = False
+        my_Serthread = MCPThread.readingPowerPack(serPP, 1000)
+        my_Serthread.clearQue()
+        my_Serthread.start()
+
+        #serialControlObj.Test_Results = []
+        #serialControlObj.Test_Results.append('Firing =' + str(i + 1))
+        OLEDRecordingThread.exitFlag = False
+
+        if serialControlObj.r['Reload Type'] == "Tri-Staple":
+            # print(serialControlObj.videoPath)
+            videoThread = OLEDRecordingThread.myThread((str(serialControlObj.r['Scenario Num']) + '#' + str(p + 1) +
+                                                        serialControlObj.r['Test Scenario'] + '_' +
+                                                        serialControlObj.r['Reload Type'] + '_' + str(i + 1)),
+                                                       serialControlObj.videoPath)
+            videoThread.start()
+            my_Serthread.clearQue()
+            serialControlObj.wait(5)
+            serialControlObj.ConnectingLegacyReload()
+            serialControlObj.wait(5)
+            Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+            serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'),
+                                               fileOpenMode='a')
+            Strings_to_Compare = locateStringsToCompareFromEvent('Tri-Staple Connected')
+            result = Compare('Tri-Staple Connected', Strings_to_Compare, Strings_from_PowerPack)
+            serialControlObj.Test_Results.append('Tri-Staple Connected:' + result)
+            print("Step: Tri-Staple Reload Connected")
+            print(serialControlObj.Test_Results)
+            serialControlObj.wait(3)
+
+        if serialControlObj.r['Reload Type'] == "SULU":
+            videoThread = OLEDRecordingThread.myThread((str(serialControlObj.r['Scenario Num']) + '#' + str(p + 1) +
+                                                        serialControlObj.r['Test Scenario'] + '_' +
+                                                        serialControlObj.r['Reload Type'] + '_' + str(i + 1)),
+                                                       serialControlObj.videoPath)
+            videoThread.start()
+            serialControlObj.Switch_ONN_Relay(5, 2)  # B5:R2 - ON
+            serialControlObj.Switch_ONN_Relay(5, 6)  # B5:R6 - ON
+            serialControlObj.wait(5)
+            ser = serial.Serial(BlackBoxComPort, 9600)
+            ############# READ ###################
+            command = bytes(SULU_EEPROM_command_byte)
+            print('SULU command', command)
+            ser.write(command)
+            time.sleep(5)
+            # print(command)
+            # s = ser.read(2)
+            # s = list(s)
+            # packet_size = s[1]
+            # read_data = ser.read(packet_size - 2)
+            # read_data = list(read_data)
+            # #print("==== READ DATA ====")
+            # #print(read_data[1:-1])
+            ser.close()
+            serialControlObj.Switch_OFF_Relay(5, 2)  # B5:R1 - OFF
+            serialControlObj.Switch_OFF_Relay(5, 6)  # B5:R2 - OFF
+            serialControlObj.wait(5)
+
+            # TEST STEP: Connecting SULU Reload
+
+            my_Serthread.clearQue()
+            serialControlObj.wait(5)
+            serialControlObj.ConnectingSULUReload()
+            serialControlObj.wait(5)
+            Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+            serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'),
+                                               fileOpenMode='a')
+
+            Strings_to_Compare = locateStringsToCompareFromEvent('SULU Connected',
+                                                                 Length=serialControlObj.r.get('Reload Length(mm)'),
+                                                                 Color=serialControlObj.r.get('Reload Color'))
+
+            result = Compare('SULU Connected', Strings_to_Compare, Strings_from_PowerPack)
+            serialControlObj.Test_Results.append('SULU Connected:'+ result)
+            print("Step: SULU Reload Connected")
+            print(serialControlObj.Test_Results)
+            serialControlObj.wait(3)
+
+        if serialControlObj.r['Reload Type'] == "MULU":
+            videoThread = OLEDRecordingThread.myThread(
+                (str(serialControlObj.r['Scenario Num']) + '#' + str(p + 1) + serialControlObj.r[
+                    'Test Scenario'] + '_' + serialControlObj.r['Reload Type'] + '_' + str(i + 1)),
+                serialControlObj.videoPath)
+            videoThread.start()
+
+            if i < 1:
+                serialControlObj.Switch_ONN_Relay(5, 2)  # B5:R2 - ON
+                serialControlObj.Switch_ONN_Relay(5, 6)  # B5:R6 - ON
+                serialControlObj.Switch_OFF_Relay(5, 8)  # B5:R8 - OFF
+                ser = serial.Serial(BlackBoxComPort, 9600)
+                ############# READ ###################
+                command = bytes(MULU_EEPROM_command_byte)
+                ser.write(command)
+                time.sleep(5)
+                ser.write(command)
+                time.sleep(5)
+                ser.write(command)
+                time.sleep(5)
+                # print(command)
+                # s = ser.read(2)
+                # s = list(s)
+                # packet_size = s[1]
+                # read_data = ser.read(packet_size - 2)
+                # read_data = list(read_data)
+                # print("==== READ DATA ====")
+                # print(read_data[1:-1])
+                ser.close()
+                serialControlObj.Switch_OFF_Relay(5, 2)  # B5:R2 - OFF
+                serialControlObj.Switch_OFF_Relay(5, 6)  # B5:R6 - OFF
+                serialControlObj.wait(5)
+
+                my_Serthread.clearQue()
+                serialControlObj.wait(5)
+                serialControlObj.ConnectingMULUReload()
+                serialControlObj.wait(5)
+
+                Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+                serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'),
+                                                   fileOpenMode='a')
+
+                '''Strings_to_Compare = [' 1Wire Device Reload attached on 1WireBus Reload',
+                                      ' P_SIG_RELOAD_SWITCH_EVENT: switch closed',
+                                      ' Smart reload', ' SM_NewSystemEventAlert: RELOAD_INSTALLED',
+                                      ' EGIA Reload Values, ReloadID(1) Color(3) OneWireID(3074)',
+                                      ' GUI_NewState: EGIA_WAIT_FOR_CLAMP_CYCLE_CLOSE']'''
+
+                Strings_to_Compare = locateStringsToCompareFromEvent('MULU Connected',
+                                                                     Length=serialControlObj.r.get('Reload Length(mm)'))
+                result = Compare('MULU Connected', Strings_to_Compare, Strings_from_PowerPack)
+                serialControlObj.Test_Results.append('MULU Connected:' + result)
+                print("Step: MULU Reload Connected")
+                print(serialControlObj.Test_Results)
+                rlist = {'Test Step': ['MULU Reload Connected'], 'Test Result': [result]}
+                df = df.append(pd.DataFrame(rlist))
+
+                serialControlObj.wait(3)
+
+                my_Serthread.clearQue()
+                serialControlObj.wait(5)
+                serialControlObj.ConnectingCartridge(CARTRIDGE_EEPROM_command_byte, BlackBoxComPort)
+                serialControlObj.wait(5)
+                Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+                serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'),
+                                                   fileOpenMode='a')
+                '''Strings_to_Compare = [' 1Wire Device Reload attached on 1WireBus Reload',
+                                      ' P_SIG_RELOAD_SWITCH_EVENT: switch closed',
+                                      ' ReloadConnected: Type=MULU, Length=45, Color=Purple',
+                                      ' Smart reload', ' SM_NewSystemEventAlert: RELOAD_INSTALLED',
+                                      ' EGIA Reload Values, ReloadID(1) Color(3) OneWireID(3074)',
+                                      ' GUI_NewState: EGIA_WAIT_FOR_CLAMP_CYCLE_CLOSE']'''
+                Strings_to_Compare = locateStringsToCompareFromEvent('Cartridge Connected',
+                                                                     Length=serialControlObj.r.get('Reload Length(mm)'),
+                                                                     Color=serialControlObj.r.get('Cartridge Color'))
+                result = Compare('Cartridge Connected', Strings_to_Compare, Strings_from_PowerPack)
+                serialControlObj.Test_Results.append('Cartridge Connected:' + result)
+                print("Step: Cartridge Connected")
+                print(serialControlObj.Test_Results)
+                rlist = {'Test Step': ['Cartridge Connected'], 'Test Result': [result]}
+                df = df.append(pd.DataFrame(rlist))
+
+        # TEST STEP: Perform Clamp Cycle Test
+        my_Serthread.clearQue()
+        serialControlObj.wait(5)
+        serialControlObj.Switch_ONN_Relay(2, 5)  # B2:R5 - ON
+        serialControlObj.wait(10)
+        serialControlObj.Switch_OFF_Relay(2, 5)  # B2:R5 - OFF
+
+        Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+        serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+        '''Strings_to_Compare = [' ****  ENTERING AO EGIA Clamp STATE  ****',
+                              ' SM_NewSystemEventAlert: FULLY_CLAMPED',
+                              ' Piezo: Fully Clamped',
+                              ' GUI_NewState: EGIA_WAIT_FOR_CLAMP_CYCLE_OPEN']'''
+        Strings_to_Compare = locateStringsToCompareFromEvent('Clamp Cycle Test Clamping')
+        result = Compare('Clamp Cycle Test Clamping', Strings_to_Compare, Strings_from_PowerPack)
+        serialControlObj.Test_Results.append('Clamp Cycle Test Clamping:' + result)
+        print("Step: Clamp Cycle Test Clamping Performed")
+        # serialControlObj.wait(3)
+        print(serialControlObj.Test_Results)
+        rlist = {'Test Step': ['Clamp Cycle Test: Clamping'], 'Test Result': [result]}
+        df = df.append(pd.DataFrame(rlist))
+
+        my_Serthread.clearQue()
+        serialControlObj.wait(5)
+        serialControlObj.Switch_ONN_Relay(2, 4)  # B2:R4 - ON
+        serialControlObj.wait(10)
+        serialControlObj.Switch_OFF_Relay(2, 4)  # B2:R4 - OFF
+
+        Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+        serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+        '''Strings_to_Compare = [' ****  ENTERING AO EGIA Unclamp STATE  ****',
+                              ' EGIA FireRod, FULLY OPEN',
+                              ' SM_NewSystemEventAlert: CLAMPCYCLE_DONE',
+                              ' Piezo: Ready Tone']'''
+        Strings_to_Compare = locateStringsToCompareFromEvent('Clamp Cycle Test Un-Clamping')
+        result = Compare('Clamp Cycle Test Un-Clamping', Strings_to_Compare, Strings_from_PowerPack)
+        serialControlObj.Test_Results.append('Clamp Cycle Test Un-Clamping:' + result)
+        print("Step: Clamp Cycle Test Un-Clamping Performed")
+        rlist = {'Test Step': ['Clamp Cycle Test: Un-Clamping'], 'Test Result': [result]}
+        df = df.append(pd.DataFrame(rlist))
+        serialControlObj.wait(5)
+        print(serialControlObj.Test_Results)
+
+
+        if articulationStateinFiring == 'Right':
+            serialControlObj.Switch_ONN_Relay(2, 6)  # B2:R6 - ON
+            serialControlObj.wait(7)
+            serialControlObj.Switch_OFF_Relay(2, 6)  # B2:R6 - OFF
+        elif articulationStateinFiring == 'Left':
+            serialControlObj.Switch_ONN_Relay(2, 3)  # B2:R3 - ON
+            serialControlObj.wait(7)
+            serialControlObj.Switch_OFF_Relay(2, 3)  # B2:R3 - OFF
+
+        cf = serialControlObj.ForceDecode(clampingForce)
+        with nidaqmx.Task() as task:
+            task.ao_channels.add_ao_voltage_chan('Dev1/ao0')
+            print('1 Channel 1 Sample Write:')
+            print(task.write(cf))
+
+        my_Serthread.clearQue()
+        serialControlObj.wait(5)
+        serialControlObj.Switch_ONN_Relay(2, 5)  # B2:R5 - ON
+        serialControlObj.wait(30)
+        serialControlObj.Switch_OFF_Relay(2, 5)  # B2:R5 - OFF
+
+        Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+        serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+        '''Strings_to_Compare = [' SM_NewSystemEventAlert: FULLY_CLAMPED',
+                              ' GUI_NewState: EGIA_RELOAD_FULLY_CLAMPED',
+                              ' Get Allowed To Fire:', '   YES: allowed to fire', ' clampDialIndex = 2',
+                              ' LED_On', ' Piezo: Fully Clamped'
+                              # part of string can be searched ? value associated is different
+                              ]'''
+        Strings_to_Compare = locateStringsToCompareFromEvent('Clamping on Tissue')
+        result = Compare('Clamping on Tissue', Strings_to_Compare, Strings_from_PowerPack)
+        serialControlObj.Test_Results.append('Clamping on Tissue:' + result)
+        serialControlObj.wait(2)
+
+        print("Step: Clamping on Tissue")
+        print(serialControlObj.Test_Results)
+
+        rlist = {'Test Step': ['Clamping'], 'Test Result': [result]}
+        df = df.append(pd.DataFrame(rlist))
+
+
+        my_Serthread.clearQue()
+        serialControlObj.wait(5)
+        serialControlObj.removeAdapter()
+        # serialControlObj.Switch_OFF_Relay(3, 3)  # B3:R3 - OFF
+        # serialControlObj.Switch_OFF_Relay(3, 4)  # B3:R4 - OFF
+        # serialControlObj.Switch_OFF_Relay(3, 2)  # B3:R3 - OFF
+        # serialControlObj.Switch_OFF_Relay(3, 1)  # B3:R4 - OFF
+        serialControlObj.wait(5)
+        Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+        serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+        Strings_to_Compare = locateStringsToCompareFromEvent('Remove Adapter')
+        result = Compare('Remove Adapter', Strings_to_Compare, Strings_from_PowerPack)
+        serialControlObj.Test_Results.append('Remove Adapter & Reload:' + result)
+        print("Step: Remove Adapter and Reload together")
+        print(serialControlObj.Test_Results)
+        rlist = {'Test Step': ['Remove Adapter and Reload together'], 'Test Result': [result]}
+        df = df.append(pd.DataFrame(rlist))
+
+        # TEST STEP: Connecting Adapter with a clamped reload
+        my_Serthread.clearQue()
+        serialControlObj.wait(5)
+        serialControlObj.ConnectAdapter()
+        serialControlObj.wait(35)
+        Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+        serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+
+        Strings_to_Compare = locateStringsToCompareFromEvent('Emergency Retracting')
+        result = Compare('Emergency Retracting', Strings_to_Compare, Strings_from_PowerPack)
+        serialControlObj.Test_Results.append('Emergency Retracting:'+result)
+        print("Step: Emergency Retracting")
+        print(serialControlObj.Test_Results)
+        rlist = {'Test Step': ['Emergency Retracting'], 'Test Result': [result]}
+        df = df.append(pd.DataFrame(rlist))
+
+        # TEST STEP: Removing Reload
+
+        my_Serthread.clearQue()
+        serialControlObj.wait(5)
+        serialControlObj.RemovingSULUReload()
+
+        serialControlObj.Switch_OFF_Relay(3, 3)  # B3:R2 - ON
+        serialControlObj.wait(.2)
+        serialControlObj.Switch_OFF_Relay(3, 4)  # B3:R1 - ON
+        serialControlObj.RemovingMULUReload()
+        serialControlObj.wait(20)
+        Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+        serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+
+        Strings_to_Compare = locateStringsToCompareFromEvent('Remove Reload Emergency Retraction')
+        result = Compare('Remove Reload Emergency Retraction', Strings_to_Compare, Strings_from_PowerPack)
+        serialControlObj.Test_Results.append('Remove Reload Emergency Retraction:'+ result)
+        print("Step: Remove Reload Emergency Retraction")
+        print(serialControlObj.Test_Results)
+        rlist = {'Test Step': ['Remove Reload Emergency Retraction'], 'Test Result': [result]}
+        df = df.append(pd.DataFrame(rlist))
+    # TEST STEP: Remove Adapter
+    my_Serthread.clearQue()
+    serialControlObj.wait(5)
+    serialControlObj.removeAdapter()
+    serialControlObj.wait(10)
+
+    Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+    serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+    # Strings_to_Compare = [' GUI_NewState: REQUEST_ADAPTER']
+    Strings_to_Compare = locateStringsToCompareFromEvent('Remove Adapter')
+    result = Compare('Remove Adapter', Strings_to_Compare, Strings_from_PowerPack)
+    serialControlObj.Test_Results.append('Remove Adapter:'+ result)
+    print("Step: Removed Adapter")
+    print(serialControlObj.Test_Results)
+    serialControlObj.wait(2)
+
+    # print("Disengaged adapter Stepper motor controlled")
+    serialControlObj.Switch_OFF_Relay(1, 8)
+    print('Adapter Clutch Disengaged')
+
+    # TEST STEP: Remove Clamshell
+    my_Serthread.clearQue()
+    serialControlObj.wait(5)
+    serialControlObj.send_decimal_bytes(TURN_OFF_ALL_RELAYS_IN_ALL_BANKS[0])
+    serialControlObj.wait(5)
+    Timestamps, Strings_from_PowerPack = ReadingQue(my_Serthread.readQue)
+    serialControl.convertListtoLogFile(Strings_from_PowerPack, str(videoPath + '\\TotalLog.txt'), fileOpenMode='a')
+    # Strings_to_Compare = [' GUI_NewState: REQUEST_CLAMSHELL']
+    Strings_to_Compare = locateStringsToCompareFromEvent('Remove Clamshell')
+    result = Compare('Remove Clamshell', Strings_to_Compare, Strings_from_PowerPack)
+    serialControlObj.Test_Results.append('Remove Clamshell:'+ result)
+    print("Step: Removed Clamshell")
+    print(serialControlObj.Test_Results)
+    serialControlObj.wait(5)
+
+
+    for item in serialControlObj.Test_Results:
+        # print(item)
+        temp2 = 'PASS'
+        try:
+            if (((str.split(item, ':', 1))[1]) == 'PASS'):
+                # serialControlObj.Test_Results.append(serialControlObj.Test_Results[0] + ':FAIL')
+                pass
+            elif (((str.split(item, ':', 1))[1]) == 'FAIL'):
+                temp2 = 'FAIL'
+                print(str((serialControlObj.Test_Results[0] + ':  Failed')))
+                break
+        except:
+            pass
+    if temp2 == 'PASS':
+        iterPass = int(iterPass) + 1
+        print(serialControlObj.r['Test Scenario'] + '% of Successful Executions: ' + str(100 * ((iterPass) / (serialControlObj.r['Num Times to Execute']))))
+
+    results_path = serialControlObj.OUTPUT_PATH + '\\Results.xlsx'
+    df.to_excel(results_path)
+    my_Serthread.clearQue()
+    serialControlObj.wait(5)
+    MCPThread.readingPowerPack.exitFlag = True
+    serPP.close()
+    OLEDRecordingThread.exitFlag = True
+
+    serialControlObj.Test_Results.append('Test Result =1:' + temp2)
+
+    with open(str((videoPath + '\\sample_result.txt')), 'a') as datalog:
+        datalog.write('\n'.join(serialControlObj.Test_Results) + '\n')
+    CS = [sys.argv[index + 1] for index, ele in enumerate(sys.argv) if ele == "-c" or ele == "--changeset"]
+    TT = [sys.argv[index + 1] for index, ele in enumerate(sys.argv) if ele == "-t" or ele == "--test"]
+    INTG = '--integration' in sys.argv
+    RP = [sys.argv[index + 1] for index, ele in enumerate(sys.argv) if ele == "-r" or ele == "--root"]
+    calculatePassFail(str((videoPath + '\\sample_result.txt')), str(RP[0] + '\\Test_Configurator.json'),
+                      str((videoPath + '\\StartUpLog.txt')), str(TT[0]), str(CS[0]), str(INTG))
+    serialControlObj.PlacingPowerPackOnCharger()
+    print('Power Pack Placed on Charger')
+    print('------------------- End of Test Scenario --------------')
+    serialControlObj.wait(30)
+
+

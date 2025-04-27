@@ -1,0 +1,141 @@
+528:     528: SYSTEM_AREA_START:
+528:     528: Ver03: savedCRC = 0FDF  calculatedCRC = 0FDF  version = 3
+528:     528: SavedSystemData is valid
+745:     745: Time: 2021-03-04 07:28:02
+1028:    1028: Reset type:
+1028:    1028:   Software
+1058:    1058: FPGA Feature Row Ok! Original Data =  0x200
+1058:    1058: !!main FPGA Refresh Start!!
+1063:    1063: !!main FPGA Refresh Done!!
+1132:    1132: 1W RTC: Not Detected. Code = 1
+1329:    1329: VerifySecret Address= 17 7C 89 B6 00 00 00 0D
+1523:    1523: Memory = 02 02 04 30 34 30 32 32 30 31
+1523:    1523:          39 2D 30 33 36 32 0D 0A 00 00
+1523:    1523:          00 00 00 00 00 00 00 00 00 00
+1523:    1523:          00 00 00 00 00 00 00 00 00 00
+1523:    1523:          00 00 00 00 00 00 00 00 00 00
+1523:    1523:          00 00 00 00 00 00 00 00 00 00
+1523:    1523:          00 AA 30 79
+1523:    1523: 1Wire Device Battery attached on 1WireBus Handle
+1524:    1524:    Address= 17 7C 89 B6 00 00 00 0D
+1524:    1524:  1Wire Device Battery authenticated and identified
+1524:    1524: OneWire_TestDeviceWritable: Battery Starting test
+1699:    1699: VerifySecret Address= 17 31 1F BA 00 00 00 0B
+1893:    1893: Memory = 02 01 04 43 31 39 41 41 43 30
+1893:    1893:          37 30 30 0D 0A 00 00 00 3F 00
+1893:    1893:          B8 0B 0C 00 2C 01 00 00 00 00
+1893:    1893:          00 00 00 00 00 A1 00 00 00 00
+1893:    1893:          00 00 00 00 00 00 00 00 00 00
+1893:    1893:          00 00 00 00 00 00 00 00 00 00
+1893:    1893:          00 E6 0E 90
+1893:    1893: 1Wire Device Handle attached on 1WireBus Handle
+1894:    1894:    Address= 17 31 1F BA 00 00 00 0B
+1894:    1894:  1Wire Device Handle authenticated and identified
+1894:    1894: OneWire_TestDeviceWritable: Handle Starting test
+1979:    1979: Saving OneWire memory to device Handle
+2291:    2291: Succeeded writing OneWire memory to device Handle
+2291:    2291: Memory = 02 01 04 43 31 39 41 41 43 30
+2291:    2291:          37 30 30 0D 0A 00 00 00 3F 00
+2291:    2291:          B8 0B 0C 00 2C 01 00 00 00 00
+2291:    2291:          00 00 00 00 00 A1 00 00 00 00
+2291:    2291:          00 00 00 00 00 00 00 00 00 00
+2291:    2291:          00 00 00 00 00 00 00 00 00 00
+2291:    2291:          00 E7 CF 50
+2292:    2292: OneWire_TestDeviceWritable: Handle Passed test
+2292:    2292: Handle used counts:   fire = 63, procedure = 12
+2292:    2292: Handle remain counts: fire = 2937, procedure = 288
+2313:    2313: Saving OneWire memory to device Battery
+2625:    2625: Succeeded writing OneWire memory to device Battery
+2625:    2625: Memory = 02 02 04 30 34 30 32 32 30 31
+2625:    2625:          39 2D 30 33 36 32 0D 0A 00 00
+10940:   10940: Bootloader updated.
+10940:   10940: UpdateFPGA: FPGA is current
+10940:   10940: Flash usage = 509K of 932K = 54.6% 00
+10945:   10945: Handle init complete
+11787:   11787: Spawning Task Priority 6, Keypad Condition Monitor Object
+11787:   11787: Active Versions:
+11787:   11787:    System Version = R29.3.2
+11787:   11787:    PP Timestamp   = 0x6040C2F8
+11788:   11788:    PP BL Timestamp= 0x6040C2C0
+11788:   11788:    Jed Timestamp  = 0x5937973D
+11788:   11788: Blob Timestamp    = 0x6040C3E5
+11788:   11788:      Agile Number = R29.3.2
+11788:   11788:      PP Rev       = R29.3.2
+11788:   11788:      PP BL Rev    = 7.2.2
+11788:   11788:      Jed Rev      = 8
+11788:   11788:      Adapt BL Rev = 11.1.1
+11789:   11789:      EGIA Rev     = 14.1.1
+11789:   11789:      EEA Rev      = 
+11789:   11789: jumpedFromBootloader = 1
+11789:   11789: TaskSPI2Tx running...Delay 5 Seconds
+
+11790:   11790: Battery log version = 11
+11790:   11790: Time: 2021-03-04 07:28:14
+11790:   11790: Data path: \data\data_000501\000511
+11790:   11790: Handle serial number: C19AAC0700
+11790:   11790: Initialization complete
+13205:   13205: Battery Design Charge Capacity = 2050
+13225:   13225: Full Charge Capacity = 1943
+13248:   13248: Battery Charge Cycle Count = 11
+13501:   13501: BQ Flash parameters have previously been validated
+13501:   13501: Bat1: BatV=7268,C1V=3633,C2V=3635,Cur=-80,CTemp=24.4,CalcRSOC=39,BqRSOC=43
+13501:   13501: Bat2: SSt=0h,OpSt=107h,ChrSt=208h,PFSt=0h,GSt=111Eh,TCA=0
+15533:   15533: AO_spawn_toPool() - priority = 8   Motor Test Object
+15540:   15540: Motor Test, Starting
+15540: Start Motor 0 - Dir=CCW, Vel=25000, time=500, ticks=600
+15540:   15540: MOTION IN PROGRESS
+15541:   15541: Adapter, Strain Gauge Error = 19
+15712:   15712: MOTION STOPPED
+15712:   15712: Motor 0 Stopped, Peak = 0, Valley = 0, CurLimit = 8000, SGUFPeak = -99.0, SGPeak = 0.0
+15712: Stop Info Motor 0 - ticks=593, time=172, reason=In Position, 00000.rdf
+15712: Start Motor 1 - Dir=CCW, Vel=25000, time=500, ticks=600
+15713:   15713: MOTION IN PROGRESS
+15714:   15714: Adapter, Strain Gauge Error = 19
+15886:   15886: MOTION STOPPED
+15886:   15886: Motor 1 Stopped, Peak = 0, Valley = 0, CurLimit = 8000, SGUFPeak = -99.0, SGPeak = 0.0
+15886: Stop Info Motor 1 - ticks=593, time=173, reason=In Position, 00001.rdf
+15886: Start Motor 2 - Dir=CCW, Vel=25000, time=500, ticks=600
+15887:   15887: MOTION IN PROGRESS
+15888:   15888: Adapter, Strain Gauge Error = 19
+16059:   16059: MOTION STOPPED
+16059:   16059: Motor 2 Stopped, Peak = 0, Valley = 0, CurLimit = 8000, SGUFPeak = -99.0, SGPeak = 0.0
+16059: Stop Info Motor 2 - ticks=592, time=172, reason=In Position, 00002.rdf
+16059: Motor Test Results
+16059:   16059: Ending task priority 8 - Motor Test Object
+16060:   16060: Motor Test Results: 
+16060:   16060:    Motor A0 = PASS Motor B1 = PASS Motor C2 = PASS
+16060:   16060: SM_NewSystemEventAlert: INIT_COMPLETE_TIMEOUT
+16060:   16060: Piezo: All Good
+16060:   16060: systemCheckCompleted complete
+17737:   17737: Enter SPI startup sequence
+23384:   23384: Archiving directory \data\data_000151\000196
+60057:   60057: *** Event Queue PRINT has 0 free ***
+63453:   63453: Going to standby
+63655:   63655: Turning off OLED
+313489:  313489: Bat1: BatV=7267,C1V=3633,C2V=3634,Cur=-73,CTemp=24.3,CalcRSOC=39,BqRSOC=43
+313489:  313489: Bat2: SSt=0h,OpSt=107h,ChrSt=208h,PFSt=0h,GSt=111Eh,TCA=0
+358847: Pre CCW Rotate Key Pressed
+358847: CCW Rotate Key Pressed
+358847:  358847: Coming out of standby
+358977: Pre CCW Rotate Key Released
+358977: CCW Rotate Key Released
+359815:  359815: Turning on OLED
+388978:  388978: Going to standby
+389067:  389067: Turning off OLED
+613545:  613545: Bat1: BatV=7265,C1V=3632,C2V=3632,Cur=-68,CTemp=24.3,CalcRSOC=39,BqRSOC=43
+613545:  613545: Bat2: SSt=0h,OpSt=107h,ChrSt=208h,PFSt=0h,GSt=111Eh,TCA=0
+699167: Pre CW Rotate Key Pressed
+699167: CW Rotate Key Pressed
+699167:  699167: Coming out of standby
+699337: Pre CW Rotate Key Released
+699337: CW Rotate Key Released
+700208:  700208: Turning on OLED
+729338:  729338: Going to standby
+729446:  729446: Turning off OLED
+900810:  900810: Time: 2021-03-04 07:43:03
+901126:  901126: 1W RTC: Not Detected. Code = 1
+913238:  913238: Bat1: BatV=7262,C1V=3630,C2V=3631,Cur=-72,CTemp=24.1,CalcRSOC=39,BqRSOC=42
+913238:  913238: Bat2: SSt=0h,OpSt=107h,ChrSt=208h,PFSt=0h,GSt=111Eh,TCA=0
+921947:  921947: Disabling archiving
+979162:  979162: SERIALCMD_RESET_DEVICE: Resetting CPU
+979426:  979426: Turning off OLED
